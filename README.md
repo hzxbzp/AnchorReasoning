@@ -1,9 +1,21 @@
 <div align="center">
 <img src="assets/banner.png" width="880" alt="AnchorReasoning">
-<p><b>AnchorReasoning</b> — visual grounding and causal reasoning for end-to-end autonomous driving.<br>
-<sub>Waymo End-to-End Driving &nbsp;·&nbsp; point-anchored objects &nbsp;·&nbsp; a reasoning chain that ends in a 5 s trajectory</sub></p>
+<p><b>AnchorReasoning</b> — visual grounding and causal reasoning for end-to-end autonomous driving.</p>
 <p><a href="data_preparation/README.md"><b>Data preparation</b></a> &nbsp;·&nbsp; <a href="training/README.md"><b>Training</b></a> &nbsp;·&nbsp; <a href="evaluation/README.md"><b>Evaluation</b></a></p>
 </div>
+
+## Overview
+
+Vision-language models (VLMs) offer a promising approach to long-tail autonomous driving, but
+existing driving datasets provide limited supervision for connecting decision-critical visual
+evidence with reasoning and planning. We introduce AnchorReasoning, a visually grounded reasoning
+dataset built on WOD-E2E, containing 416,119 annotated frames and 395,379 decision-critical elements
+across four major categories and 19 fine-grained types. Each frame is organized as a visually
+grounded chain-of-thought (VG-CoT) that links decision-critical element identification and
+localization, element attributes and implications, driving-action rationale, and action and
+trajectory planning. We further develop a curriculum supervised fine-tuning strategy that
+progressively learns these hierarchical capabilities, together with an object-size-aware grounding
+metric for evaluating localization quality.
 
 ## Samples
 
