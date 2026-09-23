@@ -1,0 +1,50 @@
+# AnchorReasoning -- CPU subset: tfrecord decoding, index/cache/dev-split
+# building, the official rater-feedback scoring, and the two re-scoring tools
+# (evaluation/rejudge.py, evaluation/baselines/rescore.py). No GPU, no CUDA.
+
+numpy>=2.2
+scipy>=1.17             # training/core/traj_codec.py, which evaluation/run_rfs.py imports
+opencv-python-headless>=4.13   # data_preparation/decode_waymo_e2e.py (panorama stitch)
+pillow>=12.0                   # data_preparation/decode_waymo_e2e.py (JPEG decode/encode)
+protobuf>=6.33          # runtime for the Waymo E2E message classes (see note (a) below)
+openai>=2.0             # training/core/metrics/judges.py, i.e. the --judge columns of
+                        # evaluation/rejudge.py and evaluation/baselines/rescore.py
+
+# The index / cache scripts (build_index, build_caches, make_dev_split,
+# plan_repair, annotation_hygiene, extract_rfs_frames) need the standard library
+# only; the packages above are for decoding, for scoring and for the judges.
+# pyyaml is deliberately absent: yaml is imported only by training/core/config.py,
+# which nothing on this path reaches -- it belongs to the training entry points.
+#
+# rejudge.py and baselines/rescore.py run without a GPU but still import torch and
+# transformers at module import time, so both must be installed even here:
+#   rescore.py -> evaluation/eval_dev.py  (torch, and transformers LogitsProcessor)
+#   rejudge.py -> the same, and additionally `from training.adapters import get_adapter`,
+#                 whose package __init__ imports every adapter (torch in adapters/base.py,
+#                 transformers in adapters/qwen25.py and qwen3vl.py).
+# On a CPU-only host add the CPU wheels and run with CUDA_VISIBLE_DEVICES="":
+#   pip install --index-url https://download.pytorch.org/whl/cpu torch==2.8.0
+#   pip install transformers==4.57.1
+# The CPU index is required: the plain PyPI torch wheel for linux-x86_64 is the
+# CUDA build and drags in several GB of nvidia-* wheels.
+# accelerate is not needed here -- neither script constructs a Trainer or passes
+# device_map -- and safetensors arrives as a transformers dependency.
+#
+# ---------------------------------------------------------------------------
+# Two Waymo pieces are not pip-installable and must be supplied by hand.
+#
+# a) the Waymo E2E message definitions, for decode_waymo_e2e.py. There is no
+#    usable waymo-open-dataset distribution on PyPI, so data_preparation/wod_proto.py
+#    builds the one message the decoder needs from a protobuf descriptor set,
+#    which takes nothing beyond the protobuf runtime above. Generate the set with:
+#      bash data_preparation/make_wod_desc.sh        # -> third_party/wod_e2e.desc
+#    ($WOD_DESC, or a path passed as the first argument, overrides the location.)
+#    If the waymo_open_dataset package is importable, wod_proto.py uses it instead
+#    and no descriptor set is needed.
+#
+# b) rater_feedback_utils.py, for evaluation/run_rfs.py -- a single numpy-only
+#    source file from the waymo-research/waymo-open-dataset repository, at
+#    src/waymo_open_dataset/metrics/python/rater_feedback_utils.py. Copy it in
+#    unchanged, into $WAYMO_METRICS_SRC (default third_party/waymo_metrics);
+#    run_rfs.py resolves it from the import path first, then from that directory.
+# ---------------------------------------------------------------------------

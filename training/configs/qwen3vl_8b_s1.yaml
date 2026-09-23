@@ -1,0 +1,99 @@
+#  Qwen3-VL-8B-Instruct / Stage-1 understanding SFT: context -> events -> has_objects -> obj x N -> n_objects
+# ==========================================================================================
+# backbone : adapter=qwen3vl_8b  family=qwen3vl  patch=16
+#            base=WEIGHTS/Qwen3-VL-8B-Instruct  (adapter.base_path; init_from=null loads it)
+#            <point> codec: (x,y) normalized to 0-1000 (adapter NORM1000_DESC; round(x/W*1000))
+#            special tokens: none
+# derived from common.yaml; only adapter / run_name / init_from / trainer.output_dir differ
+# between backbones -- keep this file and common.yaml in sync.
+
+adapter: qwen3vl_8b           # adapters.REGISTRY name -> base weights, patch, point codec, special-token handling
+stage: s1                     # s1 = understanding SFT | s2 = chain SFT
+run_name: qwen3vl_8b_s1    # run id; outputs in trainer.output_dir = RUNS/<run_name>
+init_from: null               # null = adapter base checkpoint: S1 starts from the original backbone
+
+data:                            # index + row-aligned caches built by data_preparation/
+  index: DATA/index_train.json  # training frame-dir list (dev scenes excluded at index build time)
+  meta: DATA/index_meta.json  # [intent_corrected, n_objects] per index row
+  ctx_meta: DATA/index_ctx_meta.json  # [weather, visibility, has_interesting_event] per row
+  motion_meta: DATA/index_motion_meta.json  # {motion_lon, motion_lat, sample_class, v0, lon_now, has_minority_attr, chain_complete, partition}
+  attr_freq: DATA/attr_class_freq.json  # intention/state value counts -> class-balance factor g(c)
+  plan_repair: DATA/plan_repair.json  # plan-consistency overlay {fdir: {final_plan, reason_weight, ...}}; S2 only
+  dev_online: DATA/dev_online_128.json  # 128 dev frames for the in-training eval callback
+  long_edge: 2916             # full-res panorama 2916x1079, no downscale
+  attrqa_ratio: 0.15          # S1 ONLY: probability that a sampled frame becomes an Attr-QA region sample
+  s2_partitions: [p7, p8, p9, p10, p11, p12, p13, p14, p15, p16, p17, p18, p19, p20, p21]  # S2 pool = index rows from these partitions with chain_complete==1; S1 uses the whole index
+  point_mode_train: random_interior  # train <point> = random SAM2-mask interior point (augmentation); eval = centroid-stable point
+
+sampling:                        # with-replacement weighted sampling; S1 stage-aware, S2 static
+  intent_power: 1.0           # inverse-freq exponent for intent balance (1.0 = equal GO_STRAIGHT/LEFT/RIGHT)
+  context_power: 0.3          # inverse-freq exponent for weather/visibility tails (gentle)
+  context_cap: 5.0            # clip of the combined context factor
+  event_boost: 2.0            # x for frames with a non-"Roadside parking" traffic event
+  object_cap: 4               # w_obj = min(max(n_objects,1), object_cap)
+  object_boost_ge3: 2.0       # extra x for frames with >=3 objects (S1 stage b, S2)
+  combined_cap: 8.0           # S2: min(w_intent*w_ctx*w_obj, cap) BEFORE the motion/attr factors
+  motion_mult: {start: 2.5, stop: 2.0, stay: 1.2, decel: 1.2}  # S2: x by sample_class (start/stop/stay/decel; others 1.0), applied after the cap
+  attr_mult: 1.5              # S2: x when the frame has a minority-class intention/state object
+
+loss:                            # L = L_text + lambda_traj * L_traj, each term normalised on its own tokens
+  lambda_traj: 1.0            # weight of the <traj> term (1.0 = trajectory is half of the gradient regardless of token count)
+  field_weights:                 # per-field CE weights, merged over core.target_builder.W; edit here to override
+    struct: 0.2             # tags / separators, always supervised
+    ego_state: 1.0          # S2
+    context: 1.0
+    events: 1.0
+    presence: 1.0
+    count: 2.0              # <n_objects> checksum (after the list)
+    obj_open: 3.0           # "<obj type=" = continue-vs-stop decision
+    type: 2.0
+    location: 2.0
+    content: 2.0
+    intention: 1.5          # x g(c) class-balance factor at run time
+    state: 1.5              # x g(c) class-balance factor at run time
+    rank: 1.5
+    point: 3.0              # numeric, would be drowned otherwise
+    implication: 1.5        # S2
+    reason: 1.5             # S2; frames rewritten by the plan_repair overlay use 0.5
+    final_plan: 1.5         # S2
+    motion: 2.0             # S2
+
+curriculum:                      # S1 field-unlock schedule by fraction of total steps; struct is always on
+  schedule: [a, b]            # a = {context, events, presence}; b = a + count/obj_open/type/point/rank/location/intention/state/content
+  boundaries: [0.15]          # a: 0-15%, b: 15-100%
+
+model:
+  attn: flash_attention_2     # flash_attention_2 (recent NVIDIA GPUs) | sdpa
+  freeze_vision: false        # S1: ViT trainable at visual_lr_mult
+  gradient_checkpointing: true  # enabled on the model (use_reentrant=False)
+  visual_lr_mult: 0.1         # lr multiplier for adapter.visual_param_prefix() params
+
+eval:                            # in-training dev eval: generate on data.dev_online -> proxy composite -> best/
+  enabled: true               # run training/dev_eval_callback.py (rank 0)
+  every_steps: 500            # evaluate every 500 optimizer steps
+  subset: 128                 # #dev frames per eval (= len(dev_online_128.json))
+  max_new_tokens: 1024        # greedy, no_repeat_ngram_size=12, bad-token mask; same for all backbones
+
+trainer:                         # -> transformers.TrainingArguments; run_name is passed from the top-level key
+  output_dir: RUNS/qwen3vl_8b_s1  # RUNS/<run_name>; checkpoints, best/, prompt_hash.json, DONE
+  per_device_train_batch_size: 1  # 1 x 2 GPUs x grad-accum 32 = 64 frames / optimizer step
+  gradient_accumulation_steps: 32
+  learning_rate: 1.0e-5       # S1 1.0e-5 | S2 5.0e-6 (continued training)
+  lr_scheduler_type: cosine
+  warmup_ratio: 0.03          # 3 % warmup
+  num_train_epochs: 2
+  bf16: true
+  max_grad_norm: 1.0
+  save_steps: 300             # lose <=300 steps on a crash without SIGUSR1
+  save_total_limit: 3
+  logging_steps: 10
+  deepspeed: PKG/configs/deepspeed/zero2.json  # ZeRO-2, bf16, "auto" batch/clip fields
+  seed: 42
+  dataloader_num_workers: 4   # full-res image preprocessing off the main process
+  remove_unused_columns: false  # REQUIRED: otherwise Trainer wraps the collator and drops loss_weights/field_ids/traj_mask
+  ignore_data_skip: true      # sampler is with-replacement -> no data-order state; skip the dataloader fast-forward on resume
+  report_to: wandb            # wandb | none  (WANDB_PROJECT from wandb.project below)
+
+wandb:                           # advisory: train_stage.py / the sbatch wrappers export WANDB_PROJECT=<project> when enabled
+  project: anchor-sft
+  enabled: true               # false -> also set trainer.report_to: none

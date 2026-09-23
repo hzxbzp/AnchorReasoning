@@ -1,0 +1,20 @@
+# AnchorReasoning -- visualization extras, installed on top of requirements.txt
+# or requirements-cpu.txt. No training, scoring or decoding path needs these.
+
+# evaluation/viz_common.py and evaluation/render_rfs_viz.py (per-frame renders),
+# data_preparation/visualization/annotation_showcase.py (figure panels) and
+# generate_annotated_video.py / trajectory_visualizer.py --analyze. Agg backend.
+matplotlib>=3.10
+
+# Interactive window of data_preparation/visualization/trajectory_visualizer.py
+# only (run_gui, which also switches matplotlib to the Qt5Agg backend); the
+# --analyze mode is headless and does not need it. Needs a display, and was never
+# exercised in the environments the released runs used -- hence unpinned.
+# PyQt5
+
+# Only to decode compressed-RLE COCO masks in decode_rle_mask()
+# (trajectory_visualizer.py, called from generate_annotated_video.py for the
+# segmentation field of panorama_geo_sam2_coco.json). Those files store
+# uncompressed RLE -- "counts" is a list of integers, not a string -- so the
+# branch never fires; install it only for other data.
+# pycocotools

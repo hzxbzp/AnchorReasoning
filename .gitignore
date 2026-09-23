@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Credentials
+api_key.txt
+*.key
+.env
+
+# Generated data, weights and results (never commit)
+data/
+datasets/
+weights/
+runs/
+eval_results/
+cache/
+logs/
+third_party/
+
+# Editor / OS
+*.bak
+*.swp
+*~
+.DS_Store
+.ipynb_checkpoints/
+
