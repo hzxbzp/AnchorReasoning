@@ -17,6 +17,9 @@ trajectory planning. We further develop a curriculum supervised fine-tuning stra
 progressively learns these hierarchical capabilities, together with an object-size-aware grounding
 metric for evaluating localization quality.
 
+<p align="center"><a href="assets/overview.mp4"><img src="assets/overview.webp" width="880" alt="AnchorReasoning overview video"></a><br>
+<sub><b>Overview video</b> (2:47) — the dataset, the visually grounded chain-of-thought, and qualitative model outputs. Click to play.</sub></p>
+
 ## Samples
 
 <p align="center"><a href="assets/samples/stop_line_red_light.mp4"><img src="assets/samples/stop_line_red_light.webp" width="880" alt="Stopping at a red light"></a><br>
